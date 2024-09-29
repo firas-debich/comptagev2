@@ -6,10 +6,10 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 
 const app = express();
-const port = 3000; 
+const port = 3000;
 
 
-app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 
 const options = {
@@ -20,6 +20,12 @@ const options = {
             version: '1.0.0',
             description: 'API to process files and return an Excel file.',
         },
+        servers: [
+            {
+                url: `http://localhost:${port}`,
+                description: 'Local server',
+            },
+        ],
     },
     apis: ['./index.js'], 
 };
@@ -35,9 +41,11 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         application/x-www-form-urlencoded:
  *           schema:
  *             type: object
+ *             required:
+ *               - mainFolderPath
  *             properties:
  *               mainFolderPath:
  *                 type: string
@@ -62,21 +70,17 @@ app.post('/files', async (req, res) => {
         const { mainFolderPath } = req.body;
 
         if (!mainFolderPath) {
-            return res.status(400).json({ error: 'mainFolderPath is required in the request body.' });
+            return res.status(400).json({ error: 'mainFolderPath is required as a form parameter.' });
         }
 
         const allResults = await processMainFolder(mainFolderPath);
 
-
         const workbook = await createExcelWorkbook(allResults);
-
 
         const buffer = await workbook.xlsx.writeBuffer();
 
-
         res.setHeader('Content-Disposition', 'attachment; filename=results.xlsx');
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-
 
         res.send(buffer);
     } catch (error) {
@@ -150,7 +154,7 @@ async function processSubfolder(subfolderPath) {
                     const dayMod = modDate.getDate().toString().padStart(2, '0');
                     const monthMod = (modDate.getMonth() + 1).toString().padStart(2, '0');
                     const yearMod = modDate.getFullYear();
-                    const modificationDate = `${yearMod}-${monthMod}-${dayMod}`; 
+                    const modificationDate = `${yearMod}-${monthMod}-${dayMod}`;
 
                     const key = `${modificationDate}_${magazineCode}_${dayFromFilename}${monthFromFilename}${yearFromFilename}`;
 
@@ -170,15 +174,12 @@ async function processSubfolder(subfolderPath) {
             }
         }
 
-
         for (let key in fileGroups) {
             const groupFiles = fileGroups[key];
 
             groupFiles.sort((a, b) => b.mtime - a.mtime);
 
-
             const latestFile = groupFiles[0];
-
 
             const lastLine = await getLastLine(latestFile.filePath);
 
@@ -235,7 +236,6 @@ async function createExcelWorkbook(data) {
         { header: 'In Value', key: 'InValue', width: 15 },
         { header: 'Out Value', key: 'outValue', width: 15 }
     ];
-
 
     for (const modDate in data) {
         const results = data[modDate];
